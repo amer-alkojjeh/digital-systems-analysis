@@ -1,4 +1,4 @@
-# Digital Systems Analysis - Build & Deploy Articles
+# CI/CD Publishing Pipeline
 
 ## Project Overview
 
