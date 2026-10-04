@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   schedule:
-    - cron: '*/30 * * * *'  # every 30 minutes
+    - cron: '*/30 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -15,48 +15,80 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo with submodules
+      - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
-      - name: Make clone script executable
-        run: chmod +x ./scripts/clone_overleaf_articles.sh
-
-      - name: Clone Overleaf articles from list
+      - name: Clone Overleaf articles
         env:
           OVERLEAF_GIT_TOKEN: ${{ secrets.OVERLEAF_GIT_TOKEN }}
-        run: ./scripts/clone_overleaf_articles.sh
-
-      - name: Make check overleaf executable
-        run: chmod +x ./scripts/check_changes.sh
-
-      - name: Check if Overleaf articles changed
-        id: check_overleaf_changes
-        run: ./scripts/check_changes.sh
-
-      - name: Skip workflow if no Overleaf changes
-        if: steps.check_overleaf_changes.outputs.changed == 'false'
         run: |
-          echo "No changes detected in Overleaf articles, stopping workflow gracefully."
-          exit 0  # Exit step normally; no error
+          chmod +x ./scripts/clone_overleaf_articles.sh
+          ./scripts/clone_overleaf_articles.sh
+
+      - name: Verify cloned articles
+        run: |
+          EXPECTED=$(awk 'NF && $1 !~ /^#/ {count++} END {print count+0}' overleaf_repos.txt)
+          ACTUAL=$(find articles -mindepth 2 -maxdepth 2 -type f -name main.tex | wc -l)
+
+          echo "Expected articles: $EXPECTED"
+          echo "Cloned articles:   $ACTUAL"
+
+          if [ "$EXPECTED" -eq 0 ] || [ "$ACTUAL" -ne "$EXPECTED" ]; then
+            echo "ERROR: Not all configured articles were cloned."
+            exit 1
+          fi
 
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y pandoc texlive-latex-base texlive-bibtex-extra texlive-fonts-recommended texlive-lang-european biber curl lmodern lynx
+          sudo apt-get install -y \
+            pandoc \
+            texlive-latex-base \
+            texlive-bibtex-extra \
+            texlive-fonts-recommended \
+            texlive-lang-european \
+            biber \
+            curl \
+            lmodern \
+            lynx
 
       - name: Convert LaTeX to HTML
         run: |
           chmod +x ./scripts/convert_articles.sh
           ./scripts/convert_articles.sh
 
-      - name: Generate index.html
+      - name: Verify generated articles
+        run: |
+          EXPECTED=$(awk 'NF && $1 !~ /^#/ {count++} END {print count+0}' overleaf_repos.txt)
+          ACTUAL=$(find output/articles -mindepth 2 -maxdepth 2 -type f -name index.html | wc -l)
+
+          echo "Expected HTML articles: $EXPECTED"
+          echo "Generated HTML articles: $ACTUAL"
+
+          if [ "$ACTUAL" -ne "$EXPECTED" ]; then
+            echo "ERROR: Article conversion is incomplete."
+            exit 1
+          fi
+
+      - name: Generate article index
         run: |
           chmod +x ./scripts/generate_index.sh
           ./scripts/generate_index.sh
 
-      - name: Disable Jekyll on GitHub Pages
+      - name: Verify article index
+        run: |
+          EXPECTED=$(awk 'NF && $1 !~ /^#/ {count++} END {print count+0}' overleaf_repos.txt)
+          ACTUAL=$(grep -c '<article>' output/index.html || true)
+
+          echo "Expected index entries: $EXPECTED"
+          echo "Generated index entries: $ACTUAL"
+
+          if [ "$ACTUAL" -ne "$EXPECTED" ]; then
+            echo "ERROR: Homepage article list is incomplete."
+            exit 1
+          fi
+
+      - name: Disable Jekyll
         run: touch output/.nojekyll
 
       - name: Deploy to GitHub Pages
