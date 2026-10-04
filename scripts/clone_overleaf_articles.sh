@@ -6,7 +6,7 @@ set -euo pipefail
 rm -rf articles
 mkdir -p articles
 
-while read -r project_id folder; do
+while read -r project_id folder || [[ -n "${project_id:-}" ]]; do
   [[ -z "${project_id:-}" ]] && continue
   [[ "$project_id" == \#* ]] && continue
   [[ -z "${folder:-}" ]] && {
