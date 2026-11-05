@@ -111,7 +111,23 @@ cat > "$OUTPUT_MAIN_FILE" <<EOF
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
   <title>Digital Systems Analysis</title>
+  <meta name="description"
+        content="Personal articles on tech, systems, and society" />
+
+  <link rel="canonical"
+        href="https://amer-alkojjeh.github.io/digital-systems-analysis/" />
+
+  <!-- Open Graph metadata -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Digital Systems Analysis" />
+  <meta property="og:title" content="Digital Systems Analysis" />
+  <meta property="og:description"
+        content="Personal articles on tech, systems, and society" />
+  <meta property="og:url"
+        content="https://amer-alkojjeh.github.io/digital-systems-analysis/" />
   <style>
     * { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; }
