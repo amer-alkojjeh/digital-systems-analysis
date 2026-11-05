@@ -9,7 +9,9 @@ ARTICLE_META_FILE="metadata.json"
 
 mkdir -p "$OUTPUT_DIR"
 
-declare -A year_groups
+# Keep HTML separate from sortable metadata so multi-line articles stay intact.
+declare -a article_htmls=()
+declare -a sort_records=()
 
 for dir in "$OUTPUT_ARTICLES_DIR"/*; do
     [ -d "$dir" ] || continue
@@ -18,7 +20,7 @@ for dir in "$OUTPUT_ARTICLES_DIR"/*; do
     meta_data="$dir/$ARTICLE_META_FILE"
     html_file="$dir/index.html"
 
-    # defaults
+    # Defaults
     slug=$(basename "$dir")
     title="${slug//-/ }"
     description="No description available."
@@ -26,7 +28,7 @@ for dir in "$OUTPUT_ARTICLES_DIR"/*; do
     read_time=1
     path="articles/$slug/index.html"
 
-    # load metadata if present
+    # Load metadata if present
     if [[ -f "$meta_data" ]]; then
         slug_meta=$(jq -r '.url // empty' "$meta_data")
         [[ -n "$slug_meta" ]] && slug="$slug_meta"
@@ -40,27 +42,31 @@ for dir in "$OUTPUT_ARTICLES_DIR"/*; do
         date_meta=$(jq -r '.date // empty' "$meta_data")
         [[ -n "$date_meta" ]] && date_str="$date_meta"
     else
-        echo "⚠️  No metadata for $slug"
+        echo "Warning: No metadata for $slug"
     fi
 
-    # extract year robustly
-    if ! year=$(date -d "$date_str" +%Y 2>/dev/null); then
-        # fallback: regex match 4-digit year
-        year=$(grep -oE '[0-9]{4}' <<< "$date_str" | head -n 1 || echo "unknown")
-        [[ -z "$year" ]] && year="unknown"
+    # Normalize the publication date to YYYYMMDD for descending sorting.
+    # Unparseable dates keep their original year, but sort last in that year.
+    if normalized_date=$(date -d "$date_str" +%Y%m%d 2>/dev/null); then
+        year=${normalized_date:0:4}
+        date_sort_key="$normalized_date"
+    else
+        year=$(grep -oE '[0-9]{4}' <<< "$date_str" | head -n 1 || true)
+        [[ -n "$year" ]] || year="unknown"
+        date_sort_key="00000000"
     fi
 
-    # read time estimation
+    # Read-time estimation
     if [[ -f "$html_file" ]]; then
-        text=$(lynx -dump -nolist "$html_file" 2>/dev/null || true)
-        if [[ -n "$text" ]]; then
-            word_count=$(echo "$text" | wc -w)
+        article_text=$(lynx -dump -nolist "$html_file" 2>/dev/null || true)
+        if [[ -n "$article_text" ]]; then
+            word_count=$(echo "$article_text" | wc -w)
             if (( word_count > 0 )); then
                 read_time=$(( (word_count + 199) / 200 ))
             fi
         fi
     else
-        echo "⚠️  No HTML for $slug"
+        echo "Warning: No HTML for $slug"
         continue
     fi
 
@@ -70,16 +76,34 @@ for dir in "$OUTPUT_ARTICLES_DIR"/*; do
       <p class=\"meta\">Published: $date_str &bull; Read time: ${read_time} min</p>
     </article>"
 
-    year_groups[$year]+="$article_html"$'\n'
+    article_index=${#article_htmls[@]}
+    article_htmls+=("$article_html")
+    sort_records+=("$year"$'\t'"$date_sort_key"$'\t'"$article_index")
 done
 
-# sort years
-sorted_years=$(printf "%s\n" "${!year_groups[@]}" | sort -r)
-
+# Order years newest first, then articles by publication date newest first.
 article_list=""
-for year in $sorted_years; do
-    article_list+=$'\n<h2 class="year-heading">'"$year"'</h2>\n<section class="articles">\n'"${year_groups[$year]}"'</section>\n'
-done
+previous_year=""
+while IFS=$'\t' read -r year date_sort_key article_index; do
+    [[ -n "$year" ]] || continue
+
+    if [[ "$year" != "$previous_year" ]]; then
+        if [[ -n "$previous_year" ]]; then
+            article_list+=$'</section>\n'
+        fi
+        article_list+=$'\n<h2 class="year-heading">'"$year"$'</h2>\n<section class="articles">\n'
+        previous_year="$year"
+    fi
+
+    article_list+="${article_htmls[$article_index]}"$'\n'
+done < <(
+    printf '%s\n' "${sort_records[@]}" |
+        LC_ALL=C sort -t $'\t' -k1,1nr -k2,2nr -k3,3n
+)
+
+if [[ -n "$previous_year" ]]; then
+    article_list+=$'</section>\n'
+fi
 
 # Generate index.html with embedded template
 cat > "$OUTPUT_MAIN_FILE" <<EOF
@@ -209,7 +233,7 @@ cat > "$OUTPUT_MAIN_FILE" <<EOF
       const yearSections = document.querySelectorAll('section.articles');
       yearSections.forEach(section => {
         const visibleArticles = Array.from(section.querySelectorAll('article')).filter(a => a.style.display !== 'none');
-        const yearHeading = section.previousElementSibling; // <h2> before the section
+        const yearHeading = section.previousElementSibling;
         if (visibleArticles.length === 0) {
           if (yearHeading) yearHeading.style.display = 'none';
           section.style.display = 'none';
@@ -224,4 +248,4 @@ cat > "$OUTPUT_MAIN_FILE" <<EOF
 </html>
 EOF
 
-echo "✅ Generated $OUTPUT_MAIN_FILE"
+echo "Generated $OUTPUT_MAIN_FILE"
