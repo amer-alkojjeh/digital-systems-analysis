@@ -122,12 +122,12 @@ cat > "$OUTPUT_MAIN_FILE" <<EOF
 
   <!-- Open Graph metadata -->
   <meta property="og:type" content="website" />
-  <meta property="og:site_name" content="Digital Systems Analysis" />
   <meta property="og:title" content="Digital Systems Analysis" />
   <meta property="og:description"
         content="Personal articles on tech, systems, and society" />
   <meta property="og:url"
         content="https://amer-alkojjeh.github.io/digital-systems-analysis/" />
+  <meta property="og:site_name" content="Digital Systems Analysis" />
   <style>
     * { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; }
